@@ -1,6 +1,8 @@
 package ru.gr0946x.ui;
 
 import ru.gr0946x.Converter;
+import ru.gr0946x.ui.animation.AnimationWindow;
+import ru.gr0946x.ui.fractals.ColorFunction;
 import ru.gr0946x.ui.fractals.Fractal;
 import ru.gr0946x.ui.fractals.Mandelbrot;
 import ru.gr0946x.ui.painting.FractalPainter;
@@ -17,19 +19,23 @@ public class MainWindow extends JFrame {
     private final Painter painter;
     private final Fractal mandelbrot;
     private final Converter conv;
+    private ColorFunction defaultColorFunction;
 
     public MainWindow(){
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(800, 650));
         mandelbrot = new Mandelbrot();
         conv = new Converter(-2.0, 1.0, -1.0, 1.0);
-        painter = new FractalPainter(mandelbrot, conv, (value)->{
+
+        defaultColorFunction = (value) -> {
             if (value == 1.0) return Color.BLACK;
-            var r = (float)abs(sin(5 * value));
-            var g = (float)abs(cos(8 * value) * sin (3 * value));
-            var b = (float)abs((sin(7 * value) + cos(15 * value)) / 2f);
+            var r = (float) abs(sin(5 * value));
+            var g = (float) abs(cos(8 * value) * sin(3 * value));
+            var b = (float) abs((sin(7 * value) + cos(15 * value)) / 2f);
             return new Color(r, g, b);
-        });
+        };
+
+        painter = new FractalPainter(mandelbrot, conv, defaultColorFunction);
         mainPanel = new SelectablePanel(painter);
         mainPanel.setBackground(Color.WHITE);
         mainPanel.addSelectListener((r)->{
@@ -117,9 +123,12 @@ public class MainWindow extends JFrame {
         // ========== Меню "Экскурсия" (пункт 11*) ==========
         JMenu animMenu = new JMenu("Экскурсия");
 
-        JMenuItem createVideoItem = new JMenuItem("Создать видео");
-        createVideoItem.addActionListener(e -> showMessage("Создание видео"));
-        animMenu.add(createVideoItem);
+        JMenuItem animationSetupItem = new JMenuItem("Настройка анимации...");
+        animationSetupItem.addActionListener(e -> {
+            AnimationWindow animWin = new AnimationWindow(mandelbrot, defaultColorFunction);
+            animWin.setVisible(true);
+        });
+        animMenu.add(animationSetupItem);
 
         // ========== Меню "Справка" ==========
         JMenu helpMenu = new JMenu("Справка");
