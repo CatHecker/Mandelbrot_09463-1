@@ -10,16 +10,27 @@ import ru.gr0946x.ui.painting.Painter;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 import static java.lang.Math.*;
 
 public class MainWindow extends JFrame {
 
+    private static final int UNDO_LIMIT = 100;
     private final SelectablePanel mainPanel;
     private final Painter painter;
     private final Fractal mandelbrot;
     private final Converter conv;
     private ColorFunction defaultColorFunction;
+    private final Deque<ViewPortState> undoHistory = new ArrayDeque<>();
+    private FileManager fileManager;
 
     public MainWindow(){
         setDefaultCloseOperation(EXIT_ON_CLOSE);
@@ -38,7 +49,12 @@ public class MainWindow extends JFrame {
         painter = new FractalPainter(mandelbrot, conv, defaultColorFunction);
         mainPanel = new SelectablePanel(painter);
         mainPanel.setBackground(Color.WHITE);
+
+        fileManager = new FileManager(this, painter, conv, (Mandelbrot) mandelbrot, mainPanel);
+
         mainPanel.addSelectListener((r)->{
+            if (r.width <= 0 || r.height <= 0) return;
+            saveStateForUndo();
             var xMin = conv.xScr2Crt(r.x);
             var xMax = conv.xScr2Crt(r.x + r.width);
             var yMin = conv.yScr2Crt(r.y + r.height);
@@ -47,9 +63,9 @@ public class MainWindow extends JFrame {
             conv.setYShape(yMin, yMax);
             mainPanel.repaint();
         });
-        setContent();
 
-        // ★★★★★ ДОБАВЛЯЕМ ВАШЕ МЕНЮ (ПУНКТ 4) ★★★★★
+        configureUndoAction();
+        setContent();
         createMenuBar();
     }
 
@@ -68,9 +84,6 @@ public class MainWindow extends JFrame {
         );
     }
 
-    /**
-     * Создаёт главное меню (пункт 4 лабораторной работы)
-     */
     private void createMenuBar() {
         JMenuBar menuBar = new JMenuBar();
 
@@ -78,13 +91,13 @@ public class MainWindow extends JFrame {
         JMenu fileMenu = new JMenu("Файл");
 
         JMenuItem saveFracItem = new JMenuItem("Сохранить как .frac");
-        saveFracItem.addActionListener(e -> showMessage("Сохранение .frac"));
+        saveFracItem.addActionListener(e -> fileManager.saveFracFile());
 
         JMenuItem saveJpgItem = new JMenuItem("Сохранить как JPG");
-        saveJpgItem.addActionListener(e -> showMessage("Сохранение JPG"));
+        saveJpgItem.addActionListener(e -> fileManager.saveImageFile("jpg"));
 
         JMenuItem savePngItem = new JMenuItem("Сохранить как PNG");
-        savePngItem.addActionListener(e -> showMessage("Сохранение PNG"));
+        savePngItem.addActionListener(e -> fileManager.saveImageFile("png"));
 
         fileMenu.add(saveFracItem);
         fileMenu.add(saveJpgItem);
@@ -92,7 +105,7 @@ public class MainWindow extends JFrame {
         fileMenu.addSeparator();
 
         JMenuItem openItem = new JMenuItem("Открыть .frac");
-        openItem.addActionListener(e -> showMessage("Открытие .frac"));
+        openItem.addActionListener(e -> openFracFile());
         fileMenu.add(openItem);
 
         fileMenu.addSeparator();
@@ -104,23 +117,27 @@ public class MainWindow extends JFrame {
         // ========== Меню "Правка" ==========
         JMenu editMenu = new JMenu("Правка");
 
-        JMenuItem undoItem = new JMenuItem("Отменить");
-        undoItem.addActionListener(e -> showMessage("Отмена действия (100 шагов)"));
+        JMenuItem undoItem = new JMenuItem("Отменить (Ctrl+Z)");
+        undoItem.addActionListener(e -> undoLastAction());
         editMenu.add(undoItem);
 
         // ========== Меню "Вид" ==========
         JMenu viewMenu = new JMenu("Вид");
 
         JMenuItem resetZoomItem = new JMenuItem("Сбросить масштаб");
-        resetZoomItem.addActionListener(e -> showMessage("Сброс масштаба"));
+        resetZoomItem.addActionListener(e -> {
+            saveStateForUndo();
+            conv.setXShape(-2.0, 1.0);
+            conv.setYShape(-1.0, 1.0);
+            mainPanel.repaint();
+        });
 
         JMenuItem juliaItem = new JMenuItem("Множество Жюлиа");
-        juliaItem.addActionListener(e -> showMessage("Открытие окна Жюлиа"));
-
+        juliaItem.addActionListener(e -> openJuliaWindow());
         viewMenu.add(resetZoomItem);
         viewMenu.add(juliaItem);
 
-        // ========== Меню "Экскурсия" (пункт 11*) ==========
+        // ========== Меню "Экскурсия" ==========
         JMenu animMenu = new JMenu("Экскурсия");
 
         JMenuItem animationSetupItem = new JMenuItem("Настройка анимации...");
@@ -136,13 +153,12 @@ public class MainWindow extends JFrame {
         JMenuItem aboutItem = new JMenuItem("О программе");
         aboutItem.addActionListener(e ->
                 JOptionPane.showMessageDialog(this,
-                        "Фрактал Множество Мандельброта\nЛабораторная работа №3\nГрупповой проект\n\nПункт 4: Главное меню",
+                        "Фрактал Множество Мандельброта\nЛабораторная работа №3\nГрупповой проект",
                         "О программе",
                         JOptionPane.INFORMATION_MESSAGE)
         );
         helpMenu.add(aboutItem);
 
-        // Собираем всё в строку меню
         menuBar.add(fileMenu);
         menuBar.add(editMenu);
         menuBar.add(viewMenu);
@@ -152,13 +168,139 @@ public class MainWindow extends JFrame {
         setJMenuBar(menuBar);
     }
 
-    /**
-     * Вспомогательный метод для отображения сообщений-заглушек
-     */
-    private void showMessage(String text) {
-        JOptionPane.showMessageDialog(this,
-                text + "\n(Будет реализовано позже)",
-                "Информация",
-                JOptionPane.INFORMATION_MESSAGE);
+    // ==================== СОХРАНЕНИЕ / ОТКРЫТИЕ ====================
+
+    private void openFracFile() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Открыть фрактал");
+        fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Фракталы (*.frac)", "frac"));
+
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            try (DataInputStream dis = new DataInputStream(new FileInputStream(file))) {
+                String signature = dis.readUTF();
+                if (!"MANDELBROT_FRACTAL".equals(signature)) {
+                    throw new IOException("Неверный формат файла");
+                }
+                dis.readInt(); // version
+
+                double xMin = dis.readDouble();
+                double xMax = dis.readDouble();
+                double yMin = dis.readDouble();
+                double yMax = dis.readDouble();
+                dis.readInt(); // panel width
+                dis.readInt(); // panel height
+                dis.readInt(); // iterations
+                dis.readInt(); // window width
+                dis.readInt(); // window height
+
+                saveStateForUndo();
+                conv.setXShape(xMin, xMax);
+                conv.setYShape(yMin, yMax);
+                mainPanel.repaint();
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this, "Ошибка: " + ex.getMessage());
+            }
+        }
+    }
+
+    // ==================== UNDO ====================
+
+    private void saveStateForUndo() {
+        if (undoHistory.size() == UNDO_LIMIT) {
+            undoHistory.removeFirst();
+        }
+        undoHistory.addLast(new ViewPortState(
+                conv.xScr2Crt(0),
+                conv.xScr2Crt(mainPanel.getWidth()),
+                conv.yScr2Crt(mainPanel.getHeight()),
+                conv.yScr2Crt(0)
+        ));
+    }
+
+    private void undoLastAction() {
+        if (undoHistory.isEmpty()) return;
+        var prev = undoHistory.removeLast();
+        conv.setXShape(prev.xMin, prev.xMax);
+        conv.setYShape(prev.yMin, prev.yMax);
+        mainPanel.repaint();
+    }
+
+    private void configureUndoAction() {
+        var rootPane = getRootPane();
+        var inputMap = rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        var actionMap = rootPane.getActionMap();
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.CTRL_DOWN_MASK), "undo-view");
+        actionMap.put("undo-view", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                undoLastAction();
+            }
+        });
+    }
+
+    private record ViewPortState(double xMin, double xMax, double yMin, double yMax) {}
+
+    // ==================== ЖЮЛИА ====================
+
+    private void openJuliaWindow() {
+        // Вычисляем центр текущей области как точку для Жюлиа
+        double cx = (conv.xScr2Crt(0) + conv.xScr2Crt(mainPanel.getWidth())) / 2;
+        double cy = (conv.yScr2Crt(mainPanel.getHeight()) + conv.yScr2Crt(0)) / 2;
+
+        JFrame juliaFrame = new JFrame("Множество Жюлиа (c = " +
+                String.format("%.4f", cx) + " + " + String.format("%.4f", cy) + "i)");
+        juliaFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        juliaFrame.setSize(600, 600);
+
+        // Создаём панель для Жюлиа
+        JuliaPanel juliaPanel = new JuliaPanel(cx, cy);
+        juliaFrame.add(juliaPanel);
+        juliaFrame.setVisible(true);
+    }
+
+    // Внутренний класс для отображения множества Жюлиа
+    private class JuliaPanel extends JPanel {
+        private final double cx, cy;
+        private final int maxIter = 100;
+        private final double R2 = 4;
+        private final Converter juliaConv;
+
+        JuliaPanel(double cx, double cy) {
+            this.cx = cx;
+            this.cy = cy;
+            juliaConv = new Converter(-2.0, 2.0, -1.5, 1.5);
+            setPreferredSize(new Dimension(600, 600));
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            juliaConv.setWidth(getWidth());
+            juliaConv.setHeight(getHeight());
+
+            for (int i = 0; i < getWidth(); i++) {
+                for (int j = 0; j < getHeight(); j++) {
+                    double zx = juliaConv.xScr2Crt(i);
+                    double zy = juliaConv.yScr2Crt(j);
+                    int iter = 0;
+
+                    while (zx*zx + zy*zy < R2 && iter < maxIter) {
+                        double tmp = zx*zx - zy*zy + cx;
+                        zy = 2*zx*zy + cy;
+                        zx = tmp;
+                        iter++;
+                    }
+
+                    float t = (float) iter / maxIter;
+                    if (t == 1.0f) {
+                        g.setColor(Color.BLACK);
+                    } else {
+                        g.setColor(Color.getHSBColor(t * 0.7f, 0.8f, 1.0f));
+                    }
+                    g.drawLine(i, j, i + 1, j);
+                }
+            }
+        }
     }
 }
