@@ -61,8 +61,7 @@ public class MainWindow extends JFrame {
             var xMax = conv.xScr2Crt(r.x + r.width);
             var yMin = conv.yScr2Crt(r.y + r.height);
             var yMax = conv.yScr2Crt(r.y);
-            conv.setXShape(xMin, xMax);
-            conv.setYShape(yMin, yMax);
+            fitShapeToPanelAspect(xMin, xMax, yMin, yMax);
             mainPanel.repaint();
         });
         mainPanel.addComponentListener(new ComponentAdapter() {
@@ -238,10 +237,18 @@ public class MainWindow extends JFrame {
         double yMin = conv.getYMin();
         double yMax = conv.getYMax();
 
+        fitShapeToPanelAspect(xMin, xMax, yMin, yMax);
+    }
+
+    public void fitShapeToPanelAspect(double xMin, double xMax, double yMin, double yMax) {
         double xCenter = (xMin + xMax) / 2;
         double yCenter = (yMin + yMax) / 2;
         double xRange = xMax - xMin;
         double yRange = yMax - yMin;
+        int width = painter.getWidth();
+        int height = painter.getHeight();
+        if (width <= 0 || height <= 0) return;
+
         double panelAspect = (double) width / height;
         double viewAspect = xRange / yRange;
 
