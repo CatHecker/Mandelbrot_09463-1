@@ -3,6 +3,7 @@ package ru.gr0946x.ui.interaction;
 import ru.gr0946x.Converter;
 import ru.gr0946x.ui.painting.Painter;
 import ru.gr0946x.ui.SelectablePanel;
+import ru.gr0946x.ui.ViewAspectRatio;
 
 import javax.swing.*;
 import java.awt.*;
@@ -95,8 +96,7 @@ public class PanHandler implements MouseListener, MouseMotionListener, MouseWhee
     @Override
     public void mouseClicked(MouseEvent e) {
         if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
-            conv.setXShape(defaultXMin, defaultXMax);
-            conv.setYShape(defaultYMin, defaultYMax);
+            fitShapeToPanelAspect(defaultXMin, defaultXMax, defaultYMin, defaultYMax);
             panel.repaint();
         }
     }
@@ -127,9 +127,12 @@ public class PanHandler implements MouseListener, MouseMotionListener, MouseWhee
         double newYMin = mouseY + (yMin - mouseY) * zoomFactor;
         double newYMax = mouseY + (yMax - mouseY) * zoomFactor;
 
-        conv.setXShape(newXMin, newXMax);
-        conv.setYShape(newYMin, newYMax);
+        fitShapeToPanelAspect(newXMin, newXMax, newYMin, newYMax);
         panel.repaint();
+    }
+
+    private void fitShapeToPanelAspect(double xMin, double xMax, double yMin, double yMax) {
+        ViewAspectRatio.fitToPainter(conv, painter, xMin, xMax, yMin, yMax);
     }
 
     @Override public void mouseEntered(MouseEvent e) {}

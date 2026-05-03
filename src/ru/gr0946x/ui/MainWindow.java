@@ -17,6 +17,10 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.KeyEvent;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
@@ -60,9 +64,14 @@ public class MainWindow extends JFrame {
             var xMax = conv.xScr2Crt(r.x + r.width);
             var yMin = conv.yScr2Crt(r.y + r.height);
             var yMax = conv.yScr2Crt(r.y);
-            conv.setXShape(xMin, xMax);
-            conv.setYShape(yMin, yMax);
+            fitShapeToPanelAspect(xMin, xMax, yMin, yMax);
             mainPanel.repaint();
+        });
+        mainPanel.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                fitViewToPanelAspect();
+            }
         });
 
         configureUndoAction();
@@ -238,6 +247,19 @@ public class MainWindow extends JFrame {
                 undoLastAction();
             }
         });
+    }
+
+    private void fitViewToPanelAspect() {
+        double xMin = conv.getXMin();
+        double xMax = conv.getXMax();
+        double yMin = conv.getYMin();
+        double yMax = conv.getYMax();
+
+        fitShapeToPanelAspect(xMin, xMax, yMin, yMax);
+    }
+
+    public void fitShapeToPanelAspect(double xMin, double xMax, double yMin, double yMax) {
+        ViewAspectRatio.fitToPainter(conv, painter, xMin, xMax, yMin, yMax);
     }
 
     private record ViewPortState(double xMin, double xMax, double yMin, double yMax) {}

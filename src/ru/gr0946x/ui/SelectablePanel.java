@@ -9,6 +9,7 @@ import java.util.ArrayList;
 public class SelectablePanel extends PaintPanel{
     private SelectedRect rect = null;
     private Graphics g;
+    private boolean panningMode = false;
 
     private final ArrayList<SelectListener> selectHandlers = new ArrayList<>();
     public void addSelectListener(SelectListener listener){
@@ -19,12 +20,17 @@ public class SelectablePanel extends PaintPanel{
         selectHandlers.remove(listener);
     }
 
+    public void setPanningMode(boolean panningMode) {
+        this.panningMode = panningMode;
+    }
+
     public SelectablePanel(Painter painter) {
         super(painter);
         g = getGraphics();
         addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                if (panningMode) return;
                 super.mousePressed(e);
                 rect = new SelectedRect(e.getX(), e.getY());
                 paintSelectedRect();
@@ -32,6 +38,7 @@ public class SelectablePanel extends PaintPanel{
 
             @Override
             public void mouseReleased(MouseEvent e) {
+                if (panningMode) return;
                 super.mouseReleased(e);
                 paintSelectedRect();
                 for (var handler : selectHandlers) {
@@ -51,6 +58,7 @@ public class SelectablePanel extends PaintPanel{
         addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseDragged(MouseEvent e) {
+                if (panningMode) return;
                 super.mouseDragged(e);
                 paintSelectedRect();
                 if (rect != null){
