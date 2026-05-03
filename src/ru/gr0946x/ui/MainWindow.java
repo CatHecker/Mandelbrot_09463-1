@@ -228,10 +228,6 @@ public class MainWindow extends JFrame {
     }
 
     private void fitViewToPanelAspect() {
-        int width = painter.getWidth();
-        int height = painter.getHeight();
-        if (width <= 0 || height <= 0) return;
-
         double xMin = conv.getXMin();
         double xMax = conv.getXMax();
         double yMin = conv.getYMin();
@@ -241,25 +237,7 @@ public class MainWindow extends JFrame {
     }
 
     public void fitShapeToPanelAspect(double xMin, double xMax, double yMin, double yMax) {
-        double xCenter = (xMin + xMax) / 2;
-        double yCenter = (yMin + yMax) / 2;
-        double xRange = xMax - xMin;
-        double yRange = yMax - yMin;
-        int width = painter.getWidth();
-        int height = painter.getHeight();
-        if (width <= 0 || height <= 0) return;
-
-        double panelAspect = (double) width / height;
-        double viewAspect = xRange / yRange;
-
-        if (viewAspect < panelAspect) {
-            xRange = yRange * panelAspect;
-        } else {
-            yRange = xRange / panelAspect;
-        }
-
-        conv.setXShape(xCenter - xRange / 2, xCenter + xRange / 2);
-        conv.setYShape(yCenter - yRange / 2, yCenter + yRange / 2);
+        ViewAspectRatio.fitToPainter(conv, painter, xMin, xMax, yMin, yMax);
     }
 
     private record ViewPortState(double xMin, double xMax, double yMin, double yMax) {}
